@@ -26,8 +26,18 @@ local locations = {}
 -- wrappers.
 local wrappers = {}
 
+local stages = {[0]="/", "-", "\\", "|"}
+local lstage = 0
+local function loader()
+  lstage = lstage + 1
+  term.setCursorPos(1, 1)
+  term.write(stages[lstage%4])
+end
+
 local function rebuild_index()
-  io.write("Reading chests...")
+  term.setCursorPos(1, 1)
+  term.clear()
+  io.write("  Reading chests...")
 
   locations, wrappers = {}, {}
 
@@ -49,6 +59,7 @@ local function rebuild_index()
       locations[chests[i]] = {size = chest.size()}
 
       for slot in pairs(items) do
+        loader()
         locations[chests[i]][slot] = chest.getItemDetail(slot)
       end
     end
@@ -60,14 +71,6 @@ local function rebuild_index()
 end
 
 local iochest = peripheral.wrap(input)
-
-local stages = {[0]="/", "-", "\\", "|"}
-local lstage = 0
-local function loader()
-  lstage = lstage + 1
-  term.setCursorPos(1, 1)
-  term.write(stages[lstage%4])
-end
 
 -- find a place where (item) can go
 local function _find_location(item)
@@ -85,6 +88,7 @@ end
 -- withdraw (count) of (item)
 local function withdraw(item, count)
   while count > 0 do
+    loader()
     local chest, slot, _, has = _find_location(item)
     if not chest then return nil end
     has = math.min(count, has)
@@ -101,7 +105,7 @@ end
 
 local function deposit(slot)
   local item = iochest.getItemDetail(slot)
-  print("Depositing", item.name)
+  print("  Depositing", item.name)
   while item.count > 0 do
     for chest, slots in pairs(locations) do
       local deposited
@@ -109,6 +113,7 @@ local function deposit(slot)
       for dslot, detail in pairs(slots) do
         if dslot ~= "size" then
           if detail.name == item.name and detail.count < detail.maxCount then
+            loader()
             local todepo = math.min(item.count,
               detail.maxCount - detail.count)
             item.count = item.count - todepo
@@ -145,7 +150,7 @@ local function menu(title, opts)
   local selected = 1
   local search = ""
   term.clear()
-  local w, h = term.getSize()
+  local _, h = term.getSize()
   while true do
     writeAt(2, 1, title)
     if #search == 0 then
@@ -266,6 +271,7 @@ while true do
         local count = lengthprompt(("Enter amount of %s to withdraw (0-%d)")
           :format(ritems[sel], maxn))
         if count > 0 then
+          writeAt(1, 1, "  Withdrawing " .. count .. " " .. ritems[sel])
           withdraw(ritems[sel], math.min(count, maxn))
         end
       end
