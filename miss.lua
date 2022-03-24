@@ -28,7 +28,9 @@ local wrappers = {}
 
 local stages = {[0]="/", "-", "\\", "|"}
 local lstage = 0
+local last = os.epoch("utc")
 local function loader()
+  if os.epoch("utc") - last >= 100 then last = os.epoch("utc") else return end
   lstage = lstage + 1
   term.setCursorPos(1, 1)
   term.write(stages[lstage%4])
@@ -49,6 +51,7 @@ local function rebuild_index()
   end
 
   local parallels = {}
+  local stage = 0
   for i=1, #chests, 1 do
     parallels[#parallels+1] = function()
       local chest = peripheral.wrap(chests[i])
@@ -62,6 +65,9 @@ local function rebuild_index()
         loader()
         locations[chests[i]][slot] = chest.getItemDetail(slot)
       end
+      stage = stage + 1
+      term.setCursorPos(21, 1)
+      term.write(("(%d/%d)"):format(stage, #chests))
     end
   end
 
