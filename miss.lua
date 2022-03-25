@@ -26,6 +26,8 @@ local locations = {}
 -- wrappers.
 local wrappers = {}
 
+local totalItems, maxItems = 0, 0
+
 local stages = {[0]="/", "-", "\\", "|"}
 local lstage = 0
 local last = os.epoch("utc")
@@ -42,6 +44,7 @@ local function rebuild_index()
   io.write("  MISS is reading chests...")
 
   locations, wrappers = {}, {}
+  totalItems, maxItems = 0, 0
 
   local chests = peripheral.getNames()
   for i=#chests, 1, -1 do
@@ -53,23 +56,32 @@ local function rebuild_index()
   local parallels = {}
   local stage = 0
   for i=1, #chests, 1 do
-    parallels[#parallels+1] = function()
-      local chest = peripheral.wrap(chests[i])
-      wrappers[chests[i]] = chest
+    local chest = peripheral.wrap(chests[i])
+    wrappers[chests[i]] = chest
+    maxItems = maxItems + (chest.getItemLimit(1) * chest.size())
+    loader()
+    stage = stage + 1
+    term.setCursorPos(29, 1)
+    term.write(("(%d/%d) "):format(stage, #chests))
 
+    parallels[#parallels+1] = function()
       local items = chest.list()
 
       locations[chests[i]] = {size = chest.size()}
 
       for slot in pairs(items) do
         loader()
-        locations[chests[i]][slot] = chest.getItemDetail(slot)
+        local detail = chest.getItemDetail(slot)
+        totalItems = totalItems + detail.count
+        locations[chests[i]][slot] = detail
       end
       stage = stage + 1
-      term.setCursorPos(21, 1)
-      term.write(("(%d/%d)"):format(stage, #chests))
+      term.setCursorPos(29, 1)
+      term.write(("(%d/%d) "):format(stage, #chests))
     end
   end
+
+  stage = 0
 
   parallel.waitForAll(table.unpack(parallels))
 
@@ -104,6 +116,7 @@ local function withdraw(item, count)
       locations[chest][slot].count = locations[chest][slot].count - has
     end
     count = count - has
+    totalItems = totalItems - has
     wrappers[chest].pushItems(input, slot, has)
   end
   return true
@@ -125,6 +138,7 @@ local function deposit(slot)
             item.count = item.count - todepo
             detail.count = detail.count + todepo
             deposited = true
+            totalItems = totalItems + todepo
             iochest.pushItems(chest, slot, todepo, dslot)
           end
           if item.count == 0 then break end
@@ -159,6 +173,8 @@ local function menu(title, opts)
   local _, h = term.getSize()
   while true do
     writeAt(2, 1, title)
+    writeAt(1, h, string.format("[%d%% full (%d/%d)]",
+      math.ceil((totalItems/maxItems)*100), totalItems, maxItems))
     if #search == 0 then
       writeAt(2, 2, "> (type to search)")
     else
