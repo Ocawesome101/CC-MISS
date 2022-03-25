@@ -39,7 +39,7 @@ end
 local function rebuild_index()
   term.setCursorPos(1, 1)
   term.clear()
-  io.write("  Reading chests...")
+  io.write("  MISS is reading chests...")
 
   locations, wrappers = {}, {}
 
@@ -234,6 +234,7 @@ while true do
   local option = menu("MISS Main Menu", {
     "Retrieve",
     "Deposit",
+    "Rebuild Item Index",
     "Exit"
   })
 
@@ -341,6 +342,8 @@ while true do
       if #parallels > 0 then parallel.waitForAll(table.unpack(parallels)) end
     end
   elseif option == 3 then
+    rebuild_index()
+  elseif option == 4 then
     return
   end
 end
