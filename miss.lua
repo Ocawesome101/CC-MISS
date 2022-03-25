@@ -95,13 +95,13 @@ end
 local function withdraw(item, count)
   while count > 0 do
     loader()
-    local chest, slot, _, has = _find_location(item)
+    local chest, slot, _, _has = _find_location(item)
     if not chest then return nil end
-    has = math.min(count, has)
-    if count >= has then
+    local has = math.min(count, _has)
+    if count >= _has then
       locations[chest][slot] = nil
     else
-      locations[chest][slot].count = locations[chest][slot].count - count
+      locations[chest][slot].count = locations[chest][slot].count - has
     end
     count = count - has
     wrappers[chest].pushItems(input, slot, has)
@@ -229,8 +229,8 @@ local function lengthprompt(title)
   end
 end
 
+rebuild_index()
 while true do
-  rebuild_index()
   local option = menu("MISS Main Menu", {
     "Retrieve",
     "Deposit",
@@ -247,16 +247,16 @@ while true do
       end
     end
 
-    local options = {"----  (Cancel)"}
+    local options = {"------  (Cancel)"}
     local ritems = {}
     for k, v in pairs(items) do
-      options[#options+1] = string.format("%4dx %s", v, k)
+      options[#options+1] = string.format("%6dx %s", v, k)
     end
 
     table.sort(options, function(a, b)
-      if a == "----  (Cancel)" then
+      if a == "------  (Cancel)" then
         return true
-      elseif b == "----  (Cancel)" then
+      elseif b == "------  (Cancel)" then
         return false
       else
         return a > b
@@ -292,21 +292,20 @@ while true do
       items[item.name][#items[item.name]+1] = i
     end
 
-    local options = {"----  (Cancel)", "----  (Everything)"}
+    local options = {"------  (Cancel)", "------  (Everything)"}
     local slots = {}
     for k, v in pairs(items) do
-      options[#options+1] = string.format("%4dx %s", v[1], k)
-      slots[#options] = table.pack(table.unpack(v, 2))
+      options[#options+1] = string.format("%6dx %s", v[1], k)
     end
 
     table.sort(options, function(a, b)
-      if a == "----  (Everything)" and b == "----  (Cancel)" then
+      if a == "------  (Everything)" and b == "------  (Cancel)" then
         return false
-      elseif a == "----  (Cancel)" and b == "----  (Everything" then
+      elseif a == "------  (Cancel)" and b == "------  (Everything" then
         return true
-      elseif a == "----  (Everything)" or a == "----  (Cancel)" then
+      elseif a == "------  (Everything)" or a == "------  (Cancel)" then
         return true
-      elseif b == "----  (Cancel)" or a == "----  (Everything)" then
+      elseif b == "------  (Cancel)" or a == "------  (Everything)" then
         return false
       else
         return a > b
@@ -314,7 +313,8 @@ while true do
     end)
 
     for i=3, #options, 1 do
-      slots[i] = table.pack(table.unpack(options[i]:match("x (.+)$"), 2))
+      slots[i] = table.pack(table.unpack(
+        items[options[i]:match("x (.+)$")], 2))
     end
 
     if #options < 3 then
