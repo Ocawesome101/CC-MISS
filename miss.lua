@@ -170,11 +170,9 @@ local function menu(title, opts)
   local selected = 1
   local search = ""
   term.clear()
-  local _, h = term.getSize()
+  local w, h = term.getSize()
   while true do
     writeAt(2, 1, title)
-    writeAt(1, h, string.format("[%d%% full (%d/%d)]",
-      math.ceil((totalItems/maxItems)*100), totalItems, maxItems))
     if #search == 0 then
       writeAt(2, 2, "> (type to search)")
     else
@@ -187,9 +185,15 @@ local function menu(title, opts)
       end
     end
     for i=1+scroll, #filtered, 1 do
+      if #filtered[i] + 5 >= w then
+        filtered[i] = filtered[i]:sub(1, w - 9) .. "..."
+      end
       writeAt(2, i - scroll + 3,
         (selected == i and "-> " or "   ") .. filtered[i])
     end
+    writeAt(1, h, string.format("%"..w.."s",
+      string.format("[%d%% full (%d/%d)]",
+        math.ceil((totalItems/maxItems)*100), totalItems, maxItems)))
     local sig, cc = os.pullEvent()
     if sig == "char" then
       search = search .. cc
@@ -209,16 +213,19 @@ local function menu(title, opts)
         if #search > 0 then search = search:sub(1, -2) end
       elseif cc == keys.up then
         selected = math.max(1, selected - 1)
-        if selected < scroll + 1 then
-          scroll = selected - 1
-          term.clear()
-        end
       elseif cc == keys.down then
         selected = math.min(#filtered, selected + 1)
-        if selected > h - 4 then
-          scroll = selected - (h - 4)
-          term.clear()
-        end
+      elseif cc == keys.pageUp then
+        selected = math.max(1, selected - (h - 8))
+      elseif cc == keys.pageDown then
+        selected = math.min(#filtered, selected + (h - 8))
+      end
+      if selected - scroll < 2 then
+        scroll = math.max(0, selected - 2)
+        term.clear()
+      elseif selected - scroll > h - 5 then
+        scroll = selected - (h - 5)
+        term.clear()
       end
     end
   end
