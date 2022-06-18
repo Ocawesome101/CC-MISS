@@ -1,0 +1,9 @@
+local p = "minecraft:planks"
+
+return {
+  items = {
+    p, _, _,
+    p, _, _,
+    _, _, _
+  }
+}

@@ -8,11 +8,35 @@ supporting them would be a lot of work.
 
 ]]
 
--- Configure this.
-local input = "minecraft:chest_21"
+-- The ID of the computer on which MISS is running.  Only necessary for
+-- autocrafting, when the turtle has to transfer items into its inventory.
+local selfid = "computer_3"
 
 -- Unless you intend to make an improvement,
 -- don't touch anything below this line.
+
+settings.define("miss.input_chest", {
+  description = "The input chest MISS should use.",
+  type = "string",
+})
+
+settings.define("miss.cache_index", {
+  description = "Whether MISS should cache its chest index.  A manual index rebuild is necessary when chests are added or removed.",
+  default = false,
+  type = "boolean"
+})
+
+settings.define("miss.no_cache_warning", {
+  description = "Disables the warning MISS prints while miss.cache_index is true.",
+  default = false,
+  type = "boolean"
+})
+
+-- The chest used for I/O.
+local input = settings.get("miss.input_chest")
+if not (input and peripheral.isPresent(input)) then
+  error("you must set miss.input_chest to a valid peripheral name", 0)
+end
 
 -- This table's keys are item IDs, and its
 -- values are tables of chests in which they
@@ -38,12 +62,27 @@ local function loader()
   term.write(stages[lstage%4])
 end
 
-local function rebuild_index()
+local function save_index()
+  if settings.get("miss.cache_index") and not skip_locate then
+    locations.stored = totalItems
+    term.setCursorPos(1, 1)
+    term.clear()
+    io.write("  Saving MISS item index...")
+    local data = textutils.serialize(locations, {compact=true})
+    io.open("/miss_cache", "wb"):write(data):close()
+    io.write("done\n")
+    locations.stored = nil
+  end
+end
+
+local function rebuild_index(skip_locate)
   term.setCursorPos(1, 1)
   term.clear()
-  io.write("  MISS is reading chests...")
+  io.write("  MISS is probing for chests...")
 
-  locations, wrappers = {}, {}
+  wrappers = {}
+  if not skip_locate then locations = {} end
+
   totalItems, maxItems = 0, 0
 
   local chests = peripheral.getNames()
@@ -55,35 +94,49 @@ local function rebuild_index()
 
   local parallels = {}
   local stage = 0
+
   for i=1, #chests, 1 do
     local chest = peripheral.wrap(chests[i])
     wrappers[chests[i]] = chest
     maxItems = maxItems + (chest.getItemLimit(1) * chest.size())
     loader()
     stage = stage + 1
-    term.setCursorPos(29, 1)
+    term.setCursorPos(33, 1)
     term.write(("(%d/%d) "):format(stage, #chests))
 
-    parallels[#parallels+1] = function()
-      local items = chest.list()
+    if locations[chests[i]] and not skip_locate then
+      parallels[#parallels+1] = function()
+        local items = chest.list()
 
-      locations[chests[i]] = {size = chest.size()}
+        locations[chests[i]] = {size = chest.size()}
 
-      for slot in pairs(items) do
-        loader()
-        local detail = chest.getItemDetail(slot)
-        totalItems = totalItems + detail.count
-        locations[chests[i]][slot] = detail
+        for slot in pairs(items) do
+          loader()
+          local detail = chest.getItemDetail(slot)
+          detail.tags = detail.tags or {}
+          totalItems = totalItems + detail.count
+          locations[chests[i]][slot] = detail
+        end
+        stage = stage + 1
+        term.setCursorPos(28, 1)
+        term.write(("(%d/%d) "):format(stage, #chests))
       end
-      stage = stage + 1
-      term.setCursorPos(29, 1)
-      term.write(("(%d/%d) "):format(stage, #chests))
     end
   end
 
   stage = 0
 
+  term.setCursorPos(1, 1)
+  term.clear()
+  io.write("  MISS is reading items...")
+
   parallel.waitForAll(table.unpack(parallels))
+
+  if skip_locate then
+    totalItems = locations.stored or 0
+  end
+
+  save_index()
 
   io.write("done\n")
 end
@@ -95,7 +148,7 @@ local function _find_location(item)
   for chest, slots in pairs(locations) do
     for slot, detail in pairs(slots) do
       if slot ~= "size" then
-        if detail.name == item then
+        if detail.name == item or detail.tags[item] then
           return chest, slot, detail.maxCount - detail.count, detail.count
         end
       end
@@ -124,6 +177,7 @@ end
 
 local function deposit(slot)
   local item = iochest.getItemDetail(slot)
+  if not item then return nil end
   print("  Depositing", item.name)
   while item.count > 0 do
     for chest, slots in pairs(locations) do
@@ -252,14 +306,105 @@ local function lengthprompt(title)
   end
 end
 
-rebuild_index()
+local function present(item, count)
+  local counts = {}
+
+  for _, slots in pairs(locations) do
+    for dslot, detail in pairs(slots) do
+      if dslot ~= "size" then
+        counts[detail.name] = (counts[detail.name] or 0) + detail.count
+        detail.tags = detail.tags or {}
+        for tag in pairs(detail.tags) do
+          counts[tag] = (counts[tag] or 0) + detail.count
+        end
+      end
+    end
+  end
+
+  return counts[item] and counts[item] >= count
+end
+
+local function craft(recipe)
+  recipe = recipe:gsub("[^a-zA-Z%-%_]", "-")
+  print("crafting", recipe)
+  local rdat = dofile("/recipes/"..recipe)
+
+  local counts = {}
+  for i=1, 9, 1 do
+    local item = rdat.items[i]
+    if item then
+      counts[item] = (counts[item] or 0) + 1
+    end
+  end
+
+  for item, count in pairs(counts) do
+    if not present(item, count) then
+      craft(item)
+      if not present(item, count) then
+        return
+      end
+    end
+  end
+
+  for item, count in pairs(counts) do
+    withdraw(item, count)
+  end
+
+  local citems = iochest.list()
+  for i=1, 9, 1 do
+    if rdat.items[i] then
+      if i > 6 then i = i + 2 elseif i > 3 then i = i + 1 end
+      for slot, id in pairs(citems) do
+        id.detail = id.detail or iochest.getItemDetail(slot)
+        if id.name == rdat.items[i] or
+            (id.detail.tags and id.detail.tags[rdat.items[i]]) then
+          turtle.select(i)
+          iochest.pushItems(selfid, slot, 1, i)
+        end
+      end
+    end
+  end
+
+  os.sleep(3)
+  turtle.select(1)
+  turtle.craft()
+  os.sleep(3)
+  citems = iochest.list()
+  local s = #citems + 1
+  iochest.pullItems(selfid, 1, 64, s)
+  deposit(s)
+end
+
+if turtle and not fs.exists("/recipes") then
+  fs.makeDir("/recipes")
+end
+
+if settings.get("miss.cache_index") and fs.exists("/miss_cache") then
+  if not settings.get("miss.no_cache_warning") then
+    printError("WARNING: MISS is using a cached item index. Adding or removing chests from the network will require a manual index rebuild.")
+    printError("Set miss.no_cache_warning to true to disable this warning.")
+    sleep(5)
+  end
+  local handle = io.open("/miss_cache", "rb")
+  local data = handle:read("a")
+  handle:close()
+  locations = textutils.unserialize(data)
+  totalItems = locations.stored or 0
+  rebuild_index(true)
+  locations.stored = nil
+else
+  rebuild_index()
+end
+
 while true do
-  local option = menu("MISS Main Menu", {
+  local mmopts = {
     "Retrieve",
     "Deposit",
     "Rebuild Item Index",
     "Exit"
-  })
+  }
+  if turtle then table.insert(mmopts, 4, "Autocrafting") end
+  local option = menu("MISS Main Menu", mmopts)
 
   if option == 1 then
     local items = {}
@@ -366,7 +511,21 @@ while true do
     end
   elseif option == 3 then
     rebuild_index()
-  elseif option == 4 then
+  elseif option == 4 and turtle then
+    local recipes = fs.list("/recipes")
+    table.sort(recipes)
+    table.insert(recipes, 1, "(Add)")
+    table.insert(recipes, 1, "(Cancel)")
+
+    local option = menu("Autocrafting", recipes)
+    if option == 2 then
+      printError("Recipe adding not implemented yet")
+      os.sleep(1)
+    elseif option > 2 then
+      craft(recipes[option])
+    end
+  else
+    save_index()
     return
   end
 end

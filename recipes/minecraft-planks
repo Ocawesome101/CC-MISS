@@ -1,0 +1,9 @@
+local l = "minecraft:logs"
+
+return {
+  items = {
+    l, _, _,
+    _, _, _,
+    _, _, _,
+  }
+}
