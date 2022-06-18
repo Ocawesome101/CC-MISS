@@ -12,4 +12,4 @@ You need one input/output chests and a whole bunch of storage chests on the same
 ## Pitfalls
 MISS would benefit from not rebuilding the chest index as often as it does - with a lot of chests/items it takes a while.
 
-_added 2022-06-18_: You can enable an experimental chest index cache with the `miss.cache_index` setting.  This is not perfect but speeds up load times significantly.  If you run into `Too long without yielding` errors while saving the index, disable it.
+_added 2022-06-18_: You can enable an experimental chest index cache with the `miss.cache_index` setting.  This is not perfect but speeds up load times significantly.
