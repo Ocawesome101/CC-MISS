@@ -63,7 +63,7 @@ local function loader()
 end
 
 local function save_index()
-  if settings.get("miss.cache_index") and not skip_locate then
+  if settings.get("miss.cache_index") then
     locations.stored = totalItems
     term.setCursorPos(1, 1)
     term.clear()
@@ -104,7 +104,7 @@ local function rebuild_index(skip_locate)
     term.setCursorPos(33, 1)
     term.write(("(%d/%d) "):format(stage, #chests))
 
-    if locations[chests[i]] and not skip_locate then
+    if not (locations[chests[i]] and skip_locate) then
       parallels[#parallels+1] = function()
         local items = chest.list()
 
