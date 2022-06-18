@@ -92,9 +92,28 @@ local function rebuild_index(skip_locate)
     end
   end
 
+  for k, v in pairs(locations) do
+    local exists = false
+    for i=1, #chests, 1 do
+      if chests[i] == k then
+        exists = true
+        break
+      end
+    end
+    if type(v) ~= "number" and not exists then
+      locations[k] = nil
+      for _, detail in pairs(v) do
+        if type(detail) ~= "number" then
+          totalItems = totalItems - detail.count
+        end
+      end
+    end
+  end
+
   local parallels = {}
   local stage = 0
 
+  local to_locate = 0
   for i=1, #chests, 1 do
     local chest = peripheral.wrap(chests[i])
     wrappers[chests[i]] = chest
@@ -105,6 +124,8 @@ local function rebuild_index(skip_locate)
     term.write(("(%d/%d) "):format(stage, #chests))
 
     if not (locations[chests[i]] and skip_locate) then
+      to_locate = to_locate + 1
+
       parallels[#parallels+1] = function()
         local items = chest.list()
 
@@ -119,7 +140,7 @@ local function rebuild_index(skip_locate)
         end
         stage = stage + 1
         term.setCursorPos(28, 1)
-        term.write(("(%d/%d) "):format(stage, #chests))
+        term.write(("(%d/%d) "):format(stage, to_locate))
       end
     end
   end
