@@ -38,6 +38,41 @@ if not (input and peripheral.isPresent(input)) then
   error("you must set miss.input_chest to a valid peripheral name", 0)
 end
 
+-- custom serializer
+local function serialize(t, _seen)
+  local ret = ""
+
+  if type(t) == "table" then
+    local seen = setmetatable({}, {__index = _seen})
+
+    ret = "{"
+    for k, v in pairs(t) do
+      if seen[k] then
+        k = "<recursion>"
+      end
+      if seen[v] then
+        v = "<recursion>"
+      end
+      if type(k) == "table" then
+        seen[k] = true
+      end
+      if type(v) == "table" then
+        seen[v] = true
+      end
+      ret = ret .. string.format("[%s] = %s,", serialize(k, seen),
+        serialize(v, seen))
+    end
+    ret = ret .. "}"
+  elseif type(t) == "function" or type(t) == "thread" or
+      type(t) == "userdata" then
+    error("cannot serialize type " .. type(t), 2)
+  else
+    return string.format("%q", t)
+  end
+
+  return ret
+end
+
 -- This table's keys are item IDs, and its
 -- values are tables of chests in which they
 -- can be found, and how much of the item is
@@ -68,7 +103,7 @@ local function save_index()
     term.setCursorPos(1, 1)
     term.clear()
     io.write("  Saving MISS item index...")
-    local data = textutils.serialize(locations, {compact=true})
+    local data = serialize(locations, {})
     io.open("/miss_cache", "wb"):write(data):close()
     io.write("done\n")
     locations.stored = nil
