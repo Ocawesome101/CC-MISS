@@ -135,6 +135,7 @@ local function rebuild_index(skip_locate)
         break
       end
     end
+
     if type(v) ~= "number" and not exists then
       locations[k] = nil
       for _, detail in pairs(v) do
@@ -145,23 +146,28 @@ local function rebuild_index(skip_locate)
     end
   end
 
-  local parallels = {}
+  local scanners = {}
+  local searchers = {}
   local stage = 0
 
   local to_locate = 0
   for i=1, #chests, 1 do
-    local chest = peripheral.wrap(chests[i])
-    wrappers[chests[i]] = chest
-    maxItems = maxItems + (chest.getItemLimit(1) * chest.size())
-    loader()
-    stage = stage + 1
-    term.setCursorPos(33, 1)
-    term.write(("(%d/%d) "):format(stage, #chests))
+    scanners[#scanners+1] = function()
+      local chest = peripheral.wrap(chests[i])
+      wrappers[chests[i]] = chest
+
+      maxItems = maxItems + (chest.getItemLimit(1) * chest.size())
+      loader()
+      stage = stage + 1
+      term.setCursorPos(33, 1)
+      term.write(("(%d/%d) "):format(stage, #chests))
+    end
 
     if not (locations[chests[i]] and skip_locate) then
       to_locate = to_locate + 1
 
-      parallels[#parallels+1] = function()
+      searchers[#searchers+1] = function()
+        local chest = wrappers[chests[i]]
         local items = chest.list()
 
         locations[chests[i]] = {size = chest.size()}
@@ -180,13 +186,15 @@ local function rebuild_index(skip_locate)
     end
   end
 
+  parallel.waitForAll(table.unpack(scanners))
+
   stage = 0
 
   term.setCursorPos(1, 1)
   term.clear()
   io.write("  MISS is reading items...")
 
-  parallel.waitForAll(table.unpack(parallels))
+  parallel.waitForAll(table.unpack(searchers))
 
   if skip_locate then
     totalItems = locations.stored or 0
