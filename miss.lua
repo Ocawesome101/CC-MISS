@@ -156,7 +156,7 @@ local function rebuild_index(skip_locate)
       local chest = peripheral.wrap(chests[i])
       wrappers[chests[i]] = chest
 
-      maxItems = maxItems + (chest.getItemLimit(1) * chest.size())
+      maxItems = (chest.getItemLimit(1) * chest.size()) + maxItems
       loader()
       stage = stage + 1
       term.setCursorPos(33, 1)
