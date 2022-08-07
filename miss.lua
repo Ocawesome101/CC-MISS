@@ -21,14 +21,8 @@ settings.define("miss.input_chest", {
 })
 
 settings.define("miss.cache_index", {
-  description = "Whether MISS should cache its chest index.  A manual index rebuild is necessary when chests are added or removed.",
-  default = false,
-  type = "boolean"
-})
-
-settings.define("miss.no_cache_warning", {
-  description = "Disables the warning MISS prints while miss.cache_index is true.",
-  default = false,
+  description = "Whether MISS should cache its chest index.  A manual index rebuild is necessary when items are added or removed.",
+  default = true,
   type = "boolean"
 })
 
@@ -208,11 +202,12 @@ end
 local iochest = peripheral.wrap(input)
 
 -- find a place where (item) can go
-local function _find_location(item)
+local function _find_location(item, nbt)
   for chest, slots in pairs(locations) do
     for slot, detail in pairs(slots) do
       if slot ~= "size" then
-        if detail.name == item or detail.tags[item] then
+        if (detail.name == item or (detail.tags and detail.tags[item]))
+            and ((not nbt) or detail.nbt == nbt) then
           return chest, slot, detail.maxCount - detail.count, detail.count
         end
       end
@@ -221,17 +216,18 @@ local function _find_location(item)
 end
 
 -- withdraw (count) of (item)
-local function withdraw(item, count)
+local function withdraw(item, count, nbt)
   while count > 0 do
     loader()
-    local chest, slot, _, _has = _find_location(item)
+    local chest, slot, _, _has = _find_location(item, nbt)
     if not chest then return nil end
     local has = math.min(count, _has)
-    if count >= _has then
+
+    locations[chest][slot].count = locations[chest][slot].count - has
+    if locations[chest][slot].count <= 0 then
       locations[chest][slot] = nil
-    else
-      locations[chest][slot].count = locations[chest][slot].count - has
     end
+
     count = count - has
     totalItems = totalItems - has
     wrappers[chest].pushItems(input, slot, has)
@@ -244,18 +240,21 @@ local function deposit(slot)
   if not item then return nil end
   print("  Depositing", item.name)
   while item.count > 0 do
+    local some_done_this_iter
     for chest, slots in pairs(locations) do
       local deposited
       if item.count == 0 then break end
       for dslot, detail in pairs(slots) do
         if dslot ~= "size" then
-          if detail.name == item.name and detail.count < detail.maxCount then
+          if detail.name == item.name and detail.count < detail.maxCount
+              and detail.nbt == item.nbt then
             loader()
             local todepo = math.min(item.count,
               detail.maxCount - detail.count)
             item.count = item.count - todepo
             detail.count = detail.count + todepo
             deposited = true
+            some_done_this_iter = true
             totalItems = totalItems + todepo
             iochest.pushItems(chest, slot, todepo, dslot)
           end
@@ -267,13 +266,21 @@ local function deposit(slot)
 
       if item.count > 0 and not deposited then
         if #slots < slots.size then
+          some_done_this_iter = true
           slots[#slots+1] = {
             count = 0, name = item.name,
             displayName = item.displayName,
-            maxCount = item.maxCount
+            maxCount = item.maxCount,
+            nbt = item.nbt
           }
         end
       end
+    end
+
+    if not some_done_this_iter then
+      printError("failed to deposit item " .. item.name)
+      os.sleep(1)
+      break
     end
   end
 end
@@ -297,9 +304,11 @@ local function menu(title, opts)
       writeAt(2, 2, "> " .. search .. "_ ")
     end
     local filtered = {}
+    local rawFiltered = {}
     for i=1, #opts, 1 do
       if opts[i]:lower():match(search:lower()) or #search == 0 then
         filtered[#filtered+1] = opts[i]
+        rawFiltered[#rawFiltered+1] = opts[i]
       end
     end
     for i=1+scroll, #filtered, 1 do
@@ -322,7 +331,8 @@ local function menu(title, opts)
         term.clear()
         term.setCursorPos(1,1)
         for i=1, #opts, 1 do
-          if opts[i] == filtered[selected] then
+          term.clear()
+          if opts[i] == rawFiltered[selected] then
             return i
           end
         end
@@ -444,11 +454,6 @@ if turtle and not fs.exists("/recipes") then
 end
 
 if settings.get("miss.cache_index") and fs.exists("/miss_cache") then
-  if not settings.get("miss.no_cache_warning") then
-    printError("WARNING: MISS is using a cached item index. Adding or removing chests from the network will require a manual index rebuild.")
-    printError("Set miss.no_cache_warning to true to disable this warning.")
-    sleep(5)
-  end
   local handle = io.open("/miss_cache", "rb")
   local data = handle:read("a")
   handle:close()
@@ -475,7 +480,18 @@ while true do
     for _, slots in pairs(locations) do
       for dslot, detail in pairs(slots) do
         if dslot ~= "size" then
-          items[detail.name] = (items[detail.name] or 0) + detail.count
+          local name = detail.name
+          if detail.nbt then name = name .. " (+"..detail.nbt:sub(1,6)..")" end
+
+          if not items[name] then
+            items[name] = {
+              count = detail.count,
+              name = detail.name,
+              nbt = detail.nbt
+            }
+          else
+            items[name].count = items[name].count + detail.count
+          end
         end
       end
     end
@@ -483,7 +499,7 @@ while true do
     local options = {"------  (Cancel)"}
     local ritems = {}
     for k, v in pairs(items) do
-      options[#options+1] = string.format("%6dx %s", v, k)
+      options[#options+1] = string.format("%6dx %s", v.count, k)
     end
 
     table.sort(options, function(a, b)
@@ -506,23 +522,26 @@ while true do
     else
       local sel = menu("Select Item:", options)
       if sel > 1 then
-        local maxn = items[ritems[sel]]
+        local idat = items[ritems[sel]]
+        local maxn = idat.count
         local count = lengthprompt(("Enter amount of %s to withdraw (0-%d)")
-          :format(ritems[sel], maxn))
+          :format(idat.name, maxn))
         if count > 0 then
-          writeAt(1, 1, "  Withdrawing " .. count .. " " .. ritems[sel])
-          withdraw(ritems[sel], math.min(count, maxn))
+          writeAt(1, 1, "  Withdrawing " .. count .. " " .. idat.name)
+          withdraw(idat.name, math.min(count, maxn), idat.nbt)
         end
       end
     end
   elseif option == 2 then
     local items = {}
     for i, item in pairs(iochest.list()) do
-      if not items[item.name] then
-        items[item.name] = {0}
+      local name = item.name
+      if item.nbt then name = name .. " (+"..item.nbt:sub(1,6)..")" end
+      if not items[name] then
+        items[name] = {0}
       end
-      items[item.name][1] = items[item.name][1] + item.count
-      items[item.name][#items[item.name]+1] = i
+      items[name][1] = items[name][1] + item.count
+      items[name][#items[name]+1] = i
     end
 
     local options = {"------  (Cancel)", "------  (Everything)"}

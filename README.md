@@ -10,6 +10,8 @@ Type to search in any menu.  MISS will automatically filter the available option
 You need one input/output chests and a whole bunch of storage chests on the same network, [like this](https://i.imgur.com/L5D1cAI.png).  Set the `miss.input_chest` setting to the peripheral ID of the input chest - with my setup, it's `minecraft:chest_21`.
 
 ## Pitfalls
-MISS would benefit from not rebuilding the chest index as often as it does - with a lot of chests/items it takes a while.
+~~MISS would benefit from not rebuilding the chest index as often as it does - with a lot of chests/items it takes a while.~~
 
 _added 2022-06-18_: You can enable an experimental chest index cache with the `miss.cache_index` setting.  This is not perfect but speeds up load times significantly.
+
+_added 2022-06-19_: Startup should be fairly instantaneous once an index has been saved.  Index caching is now on by default and is no longer considered experimental.
