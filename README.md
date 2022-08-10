@@ -1,5 +1,7 @@
 # M.I.S.S.
 
+### Check out the rather improved [SoLMISS](https://github.com/ocawesome101/solmiss)!
+
 The Mediocre Item Storage System, my attempt at an item storage system for ComputerCraft.  Features parallelization of peripheral operations and real-time type-to-search!
 
 This should be fairly conducive to larger stack sizes and larger chest sizes (e.g. caches or iron chests).  These have not been extensively tested.
